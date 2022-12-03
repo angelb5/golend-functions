@@ -1,3 +1,4 @@
+/* eslint-disable require-jsdoc */
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
@@ -6,12 +7,6 @@ const db = admin.firestore();
 
 // // Create and Deploy Your First Cloud Functions
 // // https://firebase.google.com/docs/functions/write-firebase-functions
-//
-exports.helloWorld = functions.https.onRequest((request, response) => {
-  functions.logger.info("Hello logs!", {structuredData: true});
-  response.send("Hello from Firebase!");
-});
-
 exports.addOneToMarca = functions.firestore
     .document("devices/{deviceId}")
     .onCreate((snap, context) => {
@@ -86,3 +81,55 @@ exports.getMarcas = functions.https.onRequest((request, response) => {
     response.status(500).send({error: "No se encontró el documento"});
   });
 });
+
+exports.syncReservasUser = functions.firestore
+    .document("users/{uid}")
+    .onUpdate(async (change, context) => {
+      // Get value of the newly added rating
+      const permisos = change.before.data().permisos;
+      const uid = context.params.uid;
+      const newAvatarUrl = change.after.data().avatarUrl;
+      const newNombre = change.after.data().nombre;
+
+      if (permisos == "Cliente") {
+        return new Promise((resolve, reject) => {
+          // eslint-disable-next-line max-len
+          updateReservasClienteBatch(uid, newAvatarUrl, newNombre, resolve).catch(reject);
+        });
+      } else if (permisos == "TI") {
+        return new Promise((resolve, reject) => {
+          // eslint-disable-next-line max-len
+          updateReservasTiBatch(uid, newAvatarUrl, newNombre, resolve).catch(reject);
+        });
+      }
+    });
+
+async function updateReservasClienteBatch(uid, avatarUrl, nombre, resolve) {
+  const query = db.collection("reservas").where("clienteUser.uid", "==", uid);
+  const snapshot = await query.get();
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      "clienteUser.avatarUrl": avatarUrl,
+      "clienteUser.nombre": nombre,
+    });
+  });
+  await batch.commit();
+  resolve();
+}
+
+async function updateReservasTiBatch(uid, avatarUrl, nombre, resolve) {
+  const query = db.collection("reservas").where("tiUser.uid", "==", uid);
+  const snapshot = await query.get();
+
+  const batch = db.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.update(doc.ref, {
+      "tiUser.avatarUrl": avatarUrl,
+      "tiUser.nombre": nombre,
+    });
+  });
+  await batch.commit();
+  resolve();
+}

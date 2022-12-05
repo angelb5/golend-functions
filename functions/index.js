@@ -98,11 +98,26 @@ exports.syncReservasUser = functions.firestore
         });
       } else if (permisos == "TI") {
         return new Promise((resolve, reject) => {
+          const newCorreo = change.after.data().correo;
+          if (change.before.data().correo!=newCorreo) {
+            updateCorreo(uid, newCorreo);
+          }
           // eslint-disable-next-line max-len
           updateReservasTiBatch(uid, newAvatarUrl, newNombre, resolve).catch(reject);
         });
       }
     });
+
+exports.deleteUser = functions.firestore
+    .document("users/{uid}")
+    .onDelete(async (snap, context) => {
+      const uid = context.params.uid;
+      return admin.auth().deleteUser(uid);
+    });
+
+async function updateCorreo(uid, correo) {
+  await admin.auth().updateUser(uid, {email: correo});
+}
 
 async function updateReservasClienteBatch(uid, avatarUrl, nombre, resolve) {
   const query = db.collection("reservas").where("clienteUser.uid", "==", uid);

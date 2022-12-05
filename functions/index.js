@@ -61,6 +61,42 @@ exports.subsOneFromMarca = functions.firestore
       });
     });
 
+exports.updateMarca = functions.firestore
+    .document("devices/{deviceId}")
+    .onUpdate((change, context) => {
+      // Get an object representing the document
+      // e.g. {'name': 'Marie', 'age': 66}
+      const oldMarca = change.before.data().marca;
+      const newMarca = change.after.data().marca;
+      if (oldMarca.toLowerCase() == newMarca.toLowerCase()) return null;
+
+      const marcasRef = db.collection("others").doc("marcas");
+      return marcasRef.get().then(function(doc) {
+        const batch = db.batch();
+        const json = doc.data();
+        let found = false;
+        Object.keys(json).forEach((marcaKey) => {
+          if (!found && marcaKey.toLowerCase() == newMarca.toLowerCase()) {
+            found = true;
+            // eslint-disable-next-line max-len
+            batch.update(marcasRef, marcaKey, parseInt(json[marcaKey])+1);
+          }
+          if (marcaKey.toLowerCase() == oldMarca.toLowerCase()) {
+            batch.update(marcasRef, marcaKey, parseInt(json[marcaKey])-1);
+          }
+        });
+        if (!found) {
+          console.log("No se encontro, deberia crear otra marca");
+          batch.update(marcasRef, newMarca, 1);
+        }
+        return batch.commit();
+      }).then( (snapshot) =>{
+        return "success";
+      }).catch(() => {
+        return "error";
+      });
+    });
+
 exports.getMarcas = functions.https.onRequest((request, response) => {
   const marcasRef = db.collection("others").doc("marcas");
   marcasRef.get().then(function(doc) {
@@ -81,6 +117,29 @@ exports.getMarcas = functions.https.onRequest((request, response) => {
     response.status(500).send({error: "No se encontró el documento"});
   });
 });
+
+exports.syncReservasDevice = functions.firestore
+    .document("devices/{id}")
+    .onUpdate(async (change, context) => {
+      // Get value of the newly added rating
+      const id = context.params.id;
+      const newPhotoUrl = change.after.data().fotosUrl[0];
+      const newMarca = change.after.data().marca;
+      const newModelo = change.after.data().modelo;
+
+      const query = db.collection("reservas").where("device.uid", "==", id);
+      const snapshot = await query.get();
+
+      const batch = db.batch();
+      snapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+          "device.fotoPrincipal": newPhotoUrl,
+          "device.marca": newMarca,
+          "device.modelo": newModelo,
+        });
+      });
+      await batch.commit();
+    });
 
 exports.syncReservasUser = functions.firestore
     .document("users/{uid}")

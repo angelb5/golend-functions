@@ -1,6 +1,7 @@
 /* eslint-disable require-jsdoc */
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const axios = require("axios");
 admin.initializeApp();
 
 const db = admin.firestore();
@@ -172,6 +173,18 @@ exports.deleteUser = functions.firestore
     .onDelete(async (snap, context) => {
       const uid = context.params.uid;
       return admin.auth().deleteUser(uid);
+    });
+
+exports.sendMail = functions.firestore
+    .document("reservas/{reservaId}")
+    .onUpdate((change, context) => {
+      const id = context.params.reservaId;
+      const oldEstado = change.before.data().estado;
+      const newEstado = change.after.data().estado;
+      if (oldEstado==newEstado) {
+        return null;
+      }
+      return axios.post("http://eureka-eli.brazilsouth.cloudapp.azure.com:8090/api/email/enviarCorreo/"+id);
     });
 
 async function updateCorreo(uid, correo) {
